@@ -28,64 +28,12 @@ const SPEECH_STYLES = {
   instruction: { rate: 0.82, pitch: 1.20, volume: 0.95 },
 };
 
-const getElevenLabsSettings = (speechStyle) => {
-  switch (speechStyle) {
-    case 'celebration':
-      return { stability: 0.12, similarity_boost: 0.45, style: 0.75, use_speaker_boost: true };
-    case 'encouragement':
-      return { stability: 0.16, similarity_boost: 0.50, style: 0.65, use_speaker_boost: true };
-    case 'question':
-      return { stability: 0.20, similarity_boost: 0.55, style: 0.55, use_speaker_boost: true };
-    case 'emphasis':
-      return { stability: 0.16, similarity_boost: 0.50, style: 0.60, use_speaker_boost: true };
-    case 'thinking':
-      return { stability: 0.24, similarity_boost: 0.60, style: 0.35, use_speaker_boost: true };
-    default:
-      return { stability: 0.20, similarity_boost: 0.55, style: 0.50, use_speaker_boost: true };
-  }
-};
-
 export async function getAudioUrl(text, style) {
   if (audioMap && audioMap[text]) {
     return audioMap[text];
   }
-
-  const cacheKey = `${text}_${style}`;
-  if (elevenLabsCache.has(cacheKey)) {
-    return elevenLabsCache.get(cacheKey);
-  }
-
-  const fetchPromise = (async () => {
-    const localApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-    const voiceSettings = getElevenLabsSettings(style);
-
-    let response = await fetch(`/api/elevenlabs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voiceId: ELEVENLABS_VOICE_ID, voiceSettings })
-    });
-
-    const isHtmlFallback = (response.headers.get('content-type') || '').includes('text/html');
-
-    if ((!response.ok || isHtmlFallback) && localApiKey) {
-      response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'xi-api-key': localApiKey },
-        body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: voiceSettings })
-      });
-    }
-
-    if (!response.ok || isHtmlFallback) {
-      throw new Error("Failed to fetch audio from both secure backend and direct fallback.");
-    }
-
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
-  })();
-
-  elevenLabsCache.set(cacheKey, fetchPromise);
-  fetchPromise.catch(() => elevenLabsCache.delete(cacheKey));
-  return fetchPromise;
+  console.warn(`No local audio found for: "${text}"`);
+  return null;
 }
 
 export function speak(text, enabled = true, style = 'statement') {
@@ -94,11 +42,17 @@ export function speak(text, enabled = true, style = 'statement') {
 
     playId++;
     const currentPlayId = playId;
-    window.speechSynthesis?.cancel();
     isSpeaking = true;
 
     try {
       const audioUrl = await getAudioUrl(text, style);
+      if (!audioUrl) {
+        // No local audio found, immediately resolve
+        isSpeaking = false;
+        resolve();
+        return;
+      }
+
       if (currentPlayId !== playId) { isSpeaking = false; resolve(); return; }
 
       if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
@@ -109,7 +63,7 @@ export function speak(text, enabled = true, style = 'statement') {
       await currentAudio.play();
       return;
     } catch (error) {
-      console.error("ElevenLabs failed, and fallback is disabled:", error);
+      console.error("Local audio failed to play:", error);
       isSpeaking = false;
       resolve();
     }
@@ -147,7 +101,6 @@ export function narrate(segments, enabled = true) {
   const cancel = () => {
     cancelled = true;
     if (currentQueue === queueId) {
-      window.speechSynthesis?.cancel();
       isSpeaking = false;
       currentQueue = null;
     }
@@ -183,7 +136,6 @@ export function narrate(segments, enabled = true) {
 export function stopNarration() {
   playId++;
   currentQueue = null;
-  window.speechSynthesis?.cancel();
   if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; currentAudio = null; }
   isSpeaking = false;
 }

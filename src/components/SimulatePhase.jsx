@@ -83,10 +83,13 @@ function Station2({ audioEnabled, onNext }) {
   const [round, setRound] = useState(0);
   const narRef = useRef(null);
 
+  const [feedback, setFeedback] = useState(null);
+  
   useEffect(() => {
     setTarget(randInt(1000, 9000));
     setValue(5000);
     setDone(false);
+    setFeedback(null);
   }, [round]);
 
   useEffect(() => {
@@ -100,6 +103,7 @@ function Station2({ audioEnabled, onNext }) {
     const diff = Math.abs(value - target);
     if (diff < 500) {
       setDone(true);
+      setFeedback('perfect');
       setValue(target); // snap
       sounds?.correct?.();
       if (audioEnabled) {
@@ -107,10 +111,13 @@ function Station2({ audioEnabled, onNext }) {
         narRef.current = narrate([celebrate("Perfect landing!")], true);
       }
     } else {
+      const msg = value < target ? "Too low! Aim higher." : "Too high! Aim lower.";
+      setFeedback(msg);
       if (audioEnabled) {
         narRef.current?.cancel();
-        narRef.current = narrate([say(value < target ? "Too low! Aim higher." : "Too high! Aim lower.")], true);
+        narRef.current = narrate([say(msg)], true);
       }
+      setTimeout(() => setFeedback(null), 2500);
     }
   };
 
@@ -162,6 +169,18 @@ function Station2({ audioEnabled, onNext }) {
         </div>
       </div>
 
+      {feedback && (
+        <div style={{
+          marginTop: 20, 
+          color: feedback === 'perfect' ? 'var(--green)' : 'var(--gold)',
+          fontSize: '1.2rem', 
+          fontWeight: 'bold', 
+          animation: feedback === 'perfect' ? 'bounceIn 0.5s' : 'pulse 0.5s'
+        }}>
+          {feedback === 'perfect' ? '✅ Perfect landing!' : `⚠️ ${feedback}`}
+        </div>
+      )}
+
       {done && (
         <div style={{ marginTop: 20, animation: 'bounceIn 0.5s' }}>
           <button className={`btn ${round < 2 ? 'btn-outline' : 'btn-primary'}`} onClick={() => round < 2 ? setRound(r => r + 1) : onNext()}>
@@ -205,6 +224,8 @@ function Station3({ audioEnabled, onComplete }) {
   const [mode, setMode] = useState('ascending');
   const narRef = useRef(null);
 
+  const [feedback, setFeedback] = useState(null);
+
   useEffect(() => {
     const newItems = Array.from({ length: 4 }, () => ({
       id: Math.random().toString(36).substring(7),
@@ -213,6 +234,7 @@ function Station3({ audioEnabled, onComplete }) {
     setItems(newItems);
     setMode(Math.random() > 0.5 ? 'ascending' : 'descending');
     setDone(false);
+    setFeedback(null);
   }, [round]);
 
   useEffect(() => {
@@ -224,7 +246,7 @@ function Station3({ audioEnabled, onComplete }) {
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
-    if (active.id !== over.id) {
+    if (over && active.id !== over.id) {
       setItems((items) => {
         const oldIndex = items.findIndex((i) => i.id === active.id);
         const newIndex = items.findIndex((i) => i.id === over.id);
@@ -240,17 +262,20 @@ function Station3({ audioEnabled, onComplete }) {
 
     if (isCorrect) {
       setDone(true);
+      setFeedback('correct');
       sounds?.correct?.();
       if (audioEnabled) {
         narRef.current?.cancel();
         narRef.current = narrate([celebrate(`Great job ordering from ${mode === 'ascending' ? 'least to greatest' : 'greatest to least'}!`)], true);
       }
     } else {
+      setFeedback('wrong');
       sounds?.wrong?.();
       if (audioEnabled) {
         narRef.current?.cancel();
         narRef.current = narrate([say("Not quite right. Try again!")], true);
       }
+      setTimeout(() => setFeedback(null), 2500);
     }
   };
 
@@ -273,6 +298,18 @@ function Station3({ audioEnabled, onComplete }) {
 
       {!done && (
         <button className="btn btn-secondary" onClick={checkOrder}>Check Order</button>
+      )}
+
+      {feedback === 'wrong' && (
+        <div style={{ color: 'var(--red)', marginTop: '16px', fontSize: '1.2rem', fontWeight: 'bold', animation: 'shake 0.4s' }}>
+          ❌ Not quite right. Try again!
+        </div>
+      )}
+      
+      {feedback === 'correct' && (
+        <div style={{ color: 'var(--green)', marginTop: '16px', fontSize: '1.2rem', fontWeight: 'bold', animation: 'bounceIn 0.5s' }}>
+          ✅ Correct! Great job!
+        </div>
       )}
 
       {done && (
